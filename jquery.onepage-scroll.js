@@ -40,56 +40,70 @@
     /*  Credit: Eike Send for the awesome swipe event */
     /*------------------------------------------------*/
 
-    $.fn.swipeEvents = function() {
+    $.fn.swipeEvents = function(state) {
         var excludedElements = "label, button, input, select, textarea, a, .noSwipe";
 
-        return this.each(function() {
 
-            var startX,
-                startY,
-                that = this,
-                $this = $(this);
+        function touchmove(event) {
+            var touches = event.touches;
 
-            this.addEventListener('touchstart', function(event) {
-                var touches = event.touches;
+            if (touches && touches.length === 1) {
+                var touchStartPosition = $.data(this, 'touchStartPosition');
+                var deltaX = touchStartPosition.x - touches[0].pageX;
+                var deltaY = touchStartPosition.y - touches[0].pageY;
 
-                if (!$(event.target).closest(excludedElements, $this).length) {
+                if (deltaX >= 50) {
                     event.preventDefault();
+                    $(this).trigger("swipeLeft");
+                } else if (deltaX <= -50) {
+                    event.preventDefault();
+                    $(this).trigger("swipeRight");
+                }
+                if (deltaY >= 50) {
+                    event.preventDefault();
+                    $(this).trigger ( "swipeUp" );
+                } else if (deltaY <= -50) {
+                    event.preventDefault();
+                    $(this).trigger ( "swipeDown" );
                 }
 
-                if (touches && touches.length) {
-                    startX = touches[0].pageX;
-                    startY = touches[0].pageY;
-                    this.addEventListener('touchmove', touchmove);
-                }
-            });
-
-            function touchmove(event) {
-                var touches = event.touches;
-
-                if (touches && touches.length === 1) {
-                    var deltaX = startX - touches[0].pageX;
-                    var deltaY = startY - touches[0].pageY;
-                    if (deltaX >= 50) {
-                        event.preventDefault();
-                        $this.trigger("swipeLeft");
-                    } else if (deltaX <= -50) {
-                        event.preventDefault();
-                        $this.trigger("swipeRight");
-                    }
-                    if (deltaY >= 50) {
-                        event.preventDefault();
-                        $this.trigger ( "swipeUp" );
-                    } else if (deltaY <= -50) {
-                        event.preventDefault();
-                        $this.trigger ( "swipeDown" );
-                    }
-
-                    if (Math.abs(deltaX) >= 50 || Math.abs(deltaY) >= 50) {
-                        this.removeEventListener('touchmove', touchmove);
-                    }
+                if (Math.abs(deltaX) >= 50 || Math.abs(deltaY) >= 50) {
+                    this.removeEventListener('touchmove', touchmove);
                 }
             }
+        }
+
+        function touchstart(event) {
+            var touches = event.touches;
+
+            if (!$(event.target).closest (excludedElements , $(this)).length) {
+                event.preventDefault ();
+            }
+
+            if ( touches && touches.length ) {
+                startX = touches[0].pageX;
+                startY = touches[0].pageY;
+                $.data(this, 'touchStartPosition', {
+                    x: touches[0].pageX,
+                    y: touches[0].pageY
+                });
+                this.addEventListener('touchmove', touchmove);
+            }
+        }
+
+        return this.each(function() {
+            var current = $.data(this, 'swipeEvents_');
+
+            if (state === false) {
+                if (current) {
+                    this.removeEventListener('touchstart' , current);
+                    current = null;
+                }
+            } else if (!current) {
+                this.addEventListener('touchstart', current = touchstart);
+            }
+
+            $.data(this, 'swipeEvents_', current);
         });
     };
 
@@ -233,7 +247,7 @@
             var valForTest = false;
             var typeOfRF = typeof settings.responsiveFallback
 
-            if(typeOfRF == "number"){
+            if(typeOfRF == "number") {
                 valForTest = $window.width() < settings.responsiveFallback;
             }
             if(typeOfRF == "boolean"){
@@ -249,34 +263,19 @@
             }
 
             //end modification
-            $document.off("swipeDown swipeUp");
 
             if (valForTest) {
                 $body.addClass("disabled-onepage-scroll");
-                $document.off('mousewheel DOMMouseScroll MozMousePixelScroll');
+                $document
+                    .swipeEvents(false)
+                    .off('mousewheel DOMMouseScroll MozMousePixelScroll');
             } else {
                 if ($body.hasClass("disabled-onepage-scroll")) {
                     $body.removeClass("disabled-onepage-scroll");
                     $("html, body, .wrapper").animate({ scrollTop: 0 }, "fast");
                 }
 
-                $document.on("swipeUp swipeDown",  function(event) {
-                    event.preventDefault();
-
-                    if (!$body.hasClass(settings.stopScroll)) {
-                        if ( event.type === 'swipeUp' ) {
-                            el.moveDown ();
-                        } else {
-                            el.moveUp ();
-                        }
-                    }
-                });
-
-                $document.on('mousewheel DOMMouseScroll MozMousePixelScroll', function(event) {
-                    event.preventDefault();
-                    var delta = event.originalEvent.wheelDelta || -event.originalEvent.detail;
-                    init_scroll(event, delta);
-                });
+                $document.swipeEvents();
             }
         }
 
@@ -332,18 +331,6 @@
 
             if(settings.pagination == true) {
                 paginationList += "<li><a data-index='"+(i+1)+"' href='#" + (i+1) + "'></a></li>"
-            }
-        });
-
-        $document.swipeEvents().on("swipeUp swipeDown",  function(event) {
-            event.preventDefault();
-
-            if (!$body.hasClass(settings.stopScroll)) {
-                if ( event.type === 'swipeUp' ) {
-                    el.moveDown ();
-                } else {
-                    el.moveUp ();
-                }
             }
         });
 
@@ -407,11 +394,24 @@
             });
         }
 
-        $document.on('mousewheel DOMMouseScroll MozMousePixelScroll', function(event) {
-            event.preventDefault();
-            var delta = event.originalEvent.wheelDelta || -event.originalEvent.detail;
-            if(!$body.hasClass("disabled-onepage-scroll")) init_scroll(event, delta);
-        });
+        $document
+            .on("swipeUp swipeDown",  function(event) {
+                if (!$body.hasClass(settings.stopScroll) && !$body.hasClass("disabled-onepage-scroll")) {
+                    event.preventDefault();
+                    if ( event.type === 'swipeUp' ) {
+                        el.moveDown ();
+                    } else {
+                        el.moveUp ();
+                    }
+                }
+            })
+            .on('mousewheel DOMMouseScroll MozMousePixelScroll', function(event) {
+                var delta = event.originalEvent.wheelDelta || -event.originalEvent.detail;
+                if(!$body.hasClass("disabled-onepage-scroll")) {
+                    event.preventDefault();
+                    init_scroll(event, delta);
+                }
+            });
 
 
         if(settings.responsiveFallback !== false) {
